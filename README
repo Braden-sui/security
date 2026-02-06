@@ -4,7 +4,7 @@
 >
 > This document describes how Vibecodr protects your code, data, and secrets.
 > It is written for users deploying code to our platform and is intentionally
-> public. If you find a vulnerability, please email **security@vibecodr.space**.
+> public. If you find a vulnerability, please email **founder@vibecodr.space**.
 
 ---
 
@@ -41,11 +41,15 @@ Vibecodr uses [Clerk](https://clerk.com) for user authentication.
 
 ### Pulse execution auth
 
-- **Private Pulses** require a valid user JWT or a short-lived **pulse grant**
-  token (expires in seconds, scoped to a specific pulse).
-- **Public/unlisted Pulses** can optionally use **Share Tokens** — revocable,
-  author-created tokens for controlled anonymous access with stricter
-  IP-based rate limits.
+All Pulse execution is gated by short-lived **pulse grant** tokens — signed
+JWTs scoped to a specific Pulse ID with an expiration measured in minutes.
+
+- **All Pulses** require a valid pulse grant token. The API worker issues
+  grants after verifying the caller's identity via their Clerk JWT.
+- **Private Pulses** additionally restrict execution to the Pulse owner.
+  Non-owners receive a 403 even with a valid grant.
+- **Public/unlisted Pulses** allow any authenticated user with a valid grant
+  to execute them.
 
 ---
 
@@ -74,8 +78,6 @@ from each other and from the platform.
   - No access to platform infrastructure or internal endpoints
 - **Network egress from the viewer's browser** — Outbound requests from vibes
   go directly from the viewer's browser, not through Vibecodr infrastructure.
-- **Offline mode available** — For maximum privacy, vibes can run in offline
-  mode where all network access is disabled.
 
 ### Code safety
 
@@ -98,7 +100,7 @@ This is not a shared container — each Pulse gets its own isolated runtime.
 - Every Pulse executes in a **dedicated V8 isolate** with its own memory heap.
 - **No shared memory** between isolates — one Pulse physically cannot read
   another Pulse's variables, data, or execution state.
-- **CPU time limits** enforced at the runtime level (plan-dependent).
+- **CPU time limits** enforced by the Cloudflare Workers runtime.
 - **No filesystem access** — Workers are stateless by design.
 - When a Pulse finishes executing, its isolate state is cleaned up.
 
@@ -153,8 +155,10 @@ architecture**:
   3. Makes the upstream request on your behalf
   4. **Redacts** the secret value from the upstream response before returning
      it to your code
-- **Scoped to your Pulse** — A secret stored for Pulse A cannot be accessed
-  by Pulse B, even if both belong to the same user.
+- **Scoped per Pulse and per user** — Secrets can be stored at the Pulse
+  level or at the user level. Pulse-level secrets take priority; user-level
+  secrets act as a shared baseline across your Pulses. Secrets belonging to
+  other users are never accessible.
 - **Platform secrets isolated** — Infrastructure credentials (API tokens, JWT
   signing keys, etc.) are never exposed to user code.
 
@@ -195,8 +199,6 @@ Multiple layers protect the platform from abuse:
 
 - **Per-user rate limiting** — Sliding window counters limit request
   frequency per user and per Pulse.
-- **Anonymous rate limiting** — Stricter IP-based limits for unauthenticated
-  or Share Token access.
 - **Daily request caps** — Plan-specific daily limits prevent runaway usage.
 - **CPU budget tracking** — Wall-clock execution time is tracked per Pulse
   to prevent resource abuse (e.g., crypto mining).
@@ -204,8 +206,9 @@ Multiple layers protect the platform from abuse:
   a single user from monopolizing compute resources.
 - **Auto-quarantine** — Pulses that repeatedly fail or exceed limits can be
   automatically disabled to protect both the user's quota and the platform.
-- **Fail-closed by default** — If the rate limiting infrastructure itself is
-  unavailable, requests are denied rather than allowed through.
+- **Fail-closed for security-critical paths** — If the concurrency guard
+  or secrets infrastructure is unavailable, requests are denied rather than
+  allowed through.
 
 ---
 
@@ -294,8 +297,8 @@ vulnerabilities (OS patching, container escapes, SSH access, etc.).
   layer.
 - **We don't allow platform access from user code** — User Workers cannot
   reach platform databases, internal APIs, or infrastructure credentials.
-- **We don't fail open** — When security infrastructure is unavailable,
-  requests are denied, not allowed.
+- **Security-critical paths fail closed** — When concurrency, secrets, or
+  host allowlist infrastructure is unavailable, requests are denied.
 
 ---
 

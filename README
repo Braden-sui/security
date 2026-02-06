@@ -52,14 +52,21 @@ Vibecodr uses [Clerk](https://clerk.com) for user authentication.
 ## 2. Vibes — Client-Side Sandbox
 
 When you view or play a vibe in the browser, the code runs inside a
-**sandboxed iframe** with an opaque origin. This means:
+**sandboxed iframe** served from a **dedicated runtime domain** (`vxbe.space`)
+that is completely separate from the main Vibecodr application. Each vibe gets
+its own unique subdomain (e.g., `c-{id}-rt.vxbe.space`), so vibes are isolated
+from each other and from the platform.
 
-- **No access to the host page** — Vibes cannot read cookies, localStorage,
-  session tokens, or any data from the Vibecodr application.
+- **Cross-origin isolation** — The runtime domain (`vxbe.space`) is a
+  separate origin from the Vibecodr application (`vibecodr.space`). Vibes
+  cannot read cookies, session tokens, or any data belonging to the platform.
+- **Per-vibe subdomains** — Each vibe runs on its own subdomain, so
+  localStorage and other origin-scoped APIs are isolated between vibes.
 - **No access to platform secrets** — The sandbox is completely isolated from
   the authenticated session.
 - **Communication via postMessage only** — The iframe can only communicate
-  with the host through a controlled message protocol.
+  with the host through a controlled handshake-based message protocol with
+  session secret verification.
 - **Content Security Policy (CSP)** — Each vibe is served with a strict CSP
   that controls what resources can be loaded:
   - Scripts can load from HTTPS CDNs (esm.sh, unpkg, cdnjs, etc.)
